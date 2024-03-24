@@ -74,11 +74,14 @@ object DataFrame {
     // le resultat est dans le fichier PART-00000 du dossier commune_et_departement
 
     //pour avoir un seul fichier avec le bon nom
-    //on recupere le fichier
-    val fs = FileSystem.get(new Configuration())
-    val file = fs.globStatus(new Path(writePath + "/part*"))(0).getPath.toString
-    //on le deplace
-    fs.rename(new Path(file), new Path(writePath + ".csv"))
+    //on recupere le fichier, on le deplace et le renomme
+    val RENAMING=true
+
+    if (RENAMING){
+      val fs = FileSystem.get(new Configuration())
+      val file = fs.globStatus(new Path(writePath + "/part*"))(0).getPath.toString
+      fs.rename(new Path(file), new Path(writePath + ".csv"))
+      fs.delete(new Path(writePath), true)}
 
     //Affichez les communes du département de l’Aisne.
 

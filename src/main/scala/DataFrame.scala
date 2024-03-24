@@ -1,6 +1,7 @@
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{col, substring}
-
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs._
 object DataFrame {
 
   def main(args: Array[String]): Unit = {
@@ -58,12 +59,61 @@ object DataFrame {
     //ayant pour colonne
     // Code_commune_INSEE, Nom_commune, Code_postal, departement, ordonné par code postal.
     println("Ecriture du fichier commune_et_departement.csv :")
-    dfWithDept.select("Code_commune_INSEE", "Nom_commune", "Code_postal", "departement")
+
+    val writePath= "src/main/ressources/commune_et_departement"
+    val dfCommuneEtDepartement=dfWithDept.select("Code_commune_INSEE", "Nom_commune", "Code_postal", "departement")
+
+    dfCommuneEtDepartement
       .orderBy("Code_postal")
+      .coalesce(1) //pour avoir un seul fichier
       .write
       .option("header", "true")
       .option("sep", ";")
-      .csv("src/main/ressources/commune_et_departement.csv")
+      .mode("overwrite")
+      .csv(writePath)
+    // le resultat est dans le fichier PART-00000 du dossier commune_et_departement
+
+    //pour avoir un seul fichier avec le bon nom
+    //on recupere le fichier
+    val fs = FileSystem.get(new Configuration())
+    val file = fs.globStatus(new Path(writePath + "/part*"))(0).getPath.toString
+    //on le deplace
+    fs.rename(new Path(file), new Path(writePath + ".csv"))
+
+    //Affichez les communes du département de l’Aisne.
+
+    //lecture de la db departement-france de data.gouv.fr
+    val dept_filePath= "src/main/ressources/departements-france.csv"
+    val dept_df = spark.read
+      .option("header", "true")
+      .option("sep", ",")
+      .option("inferSchema", "true")
+      .csv(dept_filePath)
+
+    println("Affichage des communes du département de l'Aisne :")
+    //on recuper le code du departement de l'Aisne
+    val num_dept=dept_df
+      .filter("nom_departement = 'Aisne'")
+      .select("code_departement")
+      .first()(0)
+    //on affiche les communes du departement de l'Aisne
+    dfCommuneEtDepartement
+      .filter(s"departement = ${num_dept}")
+      .show()
+
+    //Quel est le derpartment qui possède le plus de communes ?
+    println("Departement qui possède le plus de communes :")
+    val DeptWithMostCommune= dfCommuneEtDepartement.groupBy("departement").count().orderBy(col("count").desc).first()
+
+    //on recupere le nom du departement
+    val nom_deptWithMostCommune=dept_df
+      .filter(s"code_departement = ${DeptWithMostCommune(0)}")
+      .select("nom_departement")
+      .first()(0)
+
+    //on affiche le resultat
+    println(s"Le departement ${nom_deptWithMostCommune} (${DeptWithMostCommune(0)}) avec " +
+      s"${DeptWithMostCommune(1)} communes est le Departement qui possède le plus de communes")
 
 
 
